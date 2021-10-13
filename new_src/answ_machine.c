@@ -27,7 +27,7 @@ static pj_status_t answ_phone_main_init(pj_status_t *status, pjsua_acc_id *acc_i
     }
 
     *status = answ_phone_init_transport();
-    if (status != PJ_SUCCESS) error_exit("Error in init_transport()", *status);
+    if (*status != PJ_SUCCESS) error_exit("Error in init_transport()", *status);
 
     *status = answ_phone_init_sip_acc(acc_id);
     if (*status != PJ_SUCCESS) error_exit("Error init_sip_acc()", *status);
