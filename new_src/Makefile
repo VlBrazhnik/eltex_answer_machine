@@ -11,10 +11,10 @@ CPPFLAGS= ${CFLAGS}
 
 # If your application is in a file named myapp.cpp or myapp.c
 # this is the line you will need to build the binary.
-all: answ_machine 
+all: answ_machine  
 
 myapp: answ_machine.c
-	$(CC) -o $@ $< $(CPPFLAGS) $(LDFLAGS) $(LDLIBS) -g
+	$(CC) -o -g3 $@ $< $(CPPFLAGS) $(LDFLAGS) $(LDLIBS) -g -Wall -Wextra
 
 clean:
 	rm -f answ_machine.o answ_machine

@@ -1,11 +1,16 @@
 #include "answ_machine.h"
 
-int main(int argc, char *argv[]) //argv[1] may contain URL to call.
+int main(int argc, char *argv[])
 {
-    printf("Hello, now we can work on pjsua app!\n");
     pj_status_t status;
     pjsua_acc_id acc_id;
-    answ_phone_main_init(&status, &acc_id);
+
+    status = answ_phone_main_init(&status, &acc_id);
+    if (status != PJ_SUCCESS)
+    {
+        error_exit("main_init fails", status);
+    }
+    answ_phone_main_loop();
 
     return 0;
 }
@@ -32,11 +37,47 @@ static pj_status_t answ_phone_main_init(pj_status_t *status, pjsua_acc_id *acc_i
     *status = answ_phone_init_sip_acc(acc_id);
     if (*status != PJ_SUCCESS) error_exit("Error init_sip_acc()", *status);
 
-    /* Initialization is done, now start pjsua */
-    *status = pjsua_start();
-    if (*status != PJ_SUCCESS) error_exit("Error starting pjsua", *status);
-
     return *status;
+}
+
+static pj_status_t answ_phone_main_loop(void)
+{
+    pj_status_t status;
+
+    /* when init has done, start pjsua */
+    status = pjsua_start();
+    if (status != PJ_SUCCESS)
+    {
+        pjsua_destroy();
+        pjsua_perror(THIS_FILE, "pjsua cannot start", status);
+        return status;
+    }
+
+    printf("Waiting phone call\n");
+    printf("For quit from wait mode print 'q'\n");
+
+    while(1)
+    {
+        /*uint8_t*/char choice[10];
+        if (fgets(choice, sizeof(choice), stdin) == NULL) 
+        {
+            printf("EOF while reading stdin, will quit now..\n");
+            break;
+        }
+
+        if(choice[0] == 'q')
+        {
+            pjsua_destroy();
+            exit(0);
+        }
+
+        if(choice[0] == 'h')
+        {
+            pjsua_call_hangup_all();
+        }
+    }
+
+    return status;
 }
 
 /* create and init pjsua */

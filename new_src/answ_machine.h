@@ -27,6 +27,7 @@ static pj_status_t answ_phone_main_init(pj_status_t *status, pjsua_acc_id *acc_i
 static pj_status_t answ_phone_init_pjsua(void);
 static pj_status_t answ_phone_init_transport(void);
 static pj_status_t answ_phone_init_sip_acc(pjsua_acc_id *acc_id);
+static pj_status_t answ_phone_main_loop(void);
 
 static void on_incoming_call(pjsua_acc_id acc_id, pjsua_call_id call_id,
                             pjsip_rx_data *rdata);
