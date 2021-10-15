@@ -23,7 +23,7 @@
 
 #define N_TRANSPORT_IDS 3
 
-static pj_status_t answ_phone_main_init(pj_status_t *status, pjsua_acc_id *acc_id);
+static pj_status_t answ_phone_main_init(pj_status_t *status, pjsua_acc_id **acc_id);
 static pj_status_t answ_phone_init_pjsua(void);
 static pj_status_t answ_phone_init_transport(void);
 static pj_status_t answ_phone_init_sip_acc(pjsua_acc_id *acc_id);

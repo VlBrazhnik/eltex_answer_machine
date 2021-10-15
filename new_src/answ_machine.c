@@ -4,8 +4,9 @@ int main(int argc, char *argv[])
 {
     pj_status_t status;
     pjsua_acc_id acc_id;
+    pjsua_acc_id *p_acc_id = &acc_id;
 
-    status = answ_phone_main_init(&status, &acc_id);
+    status = answ_phone_main_init(&status, &p_acc_id);
     if (status != PJ_SUCCESS)
     {
         error_exit("main_init fails", status);
@@ -23,18 +24,15 @@ static void error_exit(const char *title, pj_status_t status)
     exit(EXIT_SUCCESS);
 }
 
-static pj_status_t answ_phone_main_init(pj_status_t *status, pjsua_acc_id *acc_id)
+static pj_status_t answ_phone_main_init(pj_status_t *status, pjsua_acc_id **acc_id)
 {
     *status = answ_phone_init_pjsua();
-    if (*status != PJ_SUCCESS)
-    {
-        error_exit("app_init fails", *status);
-    }
+    if (*status != PJ_SUCCESS) error_exit("app_init fails", *status);
 
     *status = answ_phone_init_transport();
     if (*status != PJ_SUCCESS) error_exit("Error in init_transport()", *status);
 
-    *status = answ_phone_init_sip_acc(acc_id);
+    *status = answ_phone_init_sip_acc(*acc_id);
     if (*status != PJ_SUCCESS) error_exit("Error init_sip_acc()", *status);
 
     return *status;
@@ -139,7 +137,8 @@ static pj_status_t answ_phone_init_sip_acc(pjsua_acc_id *acc_id)
     pjsua_acc_config cfg;
 
     pjsua_acc_config_default(&cfg);
-
+    cfg.register_on_acc_add = PJ_FALSE;
+    
     cfg.id = pj_str("sip:" SIP_USER "@" SIP_DOMAIN);
     cfg.reg_uri = pj_str("sip:" SIP_DOMAIN);
     cfg.cred_count = 1;
@@ -148,6 +147,7 @@ static pj_status_t answ_phone_init_sip_acc(pjsua_acc_id *acc_id)
     cfg.cred_info[0].username = pj_str(SIP_USER);
     cfg.cred_info[0].data_type = PJSIP_CRED_DATA_PLAIN_PASSWD;
     cfg.cred_info[0].data = pj_str(SIP_PASSWD);
+
 
     status = pjsua_acc_add(&cfg, PJ_TRUE, acc_id);
     if (status != PJ_SUCCESS) error_exit("Error adding account", status);
