@@ -14,20 +14,25 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <unistd.h>
 
 #define THIS_FILE   "APP"
+#define AUDIO_MSG   "/home/vlbrazhnikov/Local_Rep/eltex_answer_machine/audio_msg/female.wav"
 
-#define SIP_DOMAIN  "example.com"
+#define SIP_DOMAIN  "cookies.com"
 #define SIP_USER    "martin"
 #define SIP_PASSWD  "cookie"
 
 #define N_TRANSPORT_IDS 3
+#define current_acc pjsua_acc_get_default()
 
 static pj_status_t answ_phone_main_init(pj_status_t *status, pjsua_acc_id **acc_id);
 static pj_status_t answ_phone_init_pjsua(void);
 static pj_status_t answ_phone_init_transport(void);
 static pj_status_t answ_phone_init_sip_acc(pjsua_acc_id *acc_id);
 static pj_status_t answ_phone_main_loop(void);
+static pj_status_t answ_phone_play_ringtone(pjsua_call_id *call_id);
+static pj_status_t answ_phone_play_msg(pjsua_call_id *call_id);
 
 static void on_incoming_call(pjsua_acc_id acc_id, pjsua_call_id call_id,
                             pjsip_rx_data *rdata);

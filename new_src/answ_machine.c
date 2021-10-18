@@ -52,11 +52,10 @@ static pj_status_t answ_phone_main_loop(void)
     }
 
     printf("Waiting phone call\n");
-    printf("For quit from wait mode print 'q'\n");
-
     while(1)
     {
-        /*uint8_t*/char choice[10];
+        printf("For quit from wait mode print 'q'\n");
+        uint8_t choice[10];
         if (fgets(choice, sizeof(choice), stdin) == NULL) 
         {
             printf("EOF while reading stdin, will quit now..\n");
@@ -68,13 +67,7 @@ static pj_status_t answ_phone_main_loop(void)
             pjsua_destroy();
             exit(0);
         }
-
-        if(choice[0] == 'h')
-        {
-            pjsua_call_hangup_all();
-        }
     }
-
     return status;
 }
 
@@ -99,14 +92,17 @@ static pj_status_t answ_phone_init_pjsua(void)
     pjsua_logging_config_default(&log_cfg);
     pjsua_media_config_default(&media_cfg);
 
+    //change media config
+    media_cfg.snd_play_latency = 3000;
+
     //fill fildes
     ua_cfg.cb.on_incoming_call = &on_incoming_call;
-    ua_cfg.cb.on_call_state = &on_call_state;
     ua_cfg.cb.on_call_media_state = &on_call_media_state;
+    ua_cfg.cb.on_call_state = &on_call_state;
 
     log_cfg.console_level = 4;
 
-    stat = pjsua_init(&ua_cfg, &log_cfg, NULL);
+    stat = pjsua_init(&ua_cfg, &log_cfg, &media_cfg);
     if (stat != PJ_SUCCESS) error_exit("Error in pjsua_init()", stat);
 
     return stat;
@@ -148,10 +144,77 @@ static pj_status_t answ_phone_init_sip_acc(pjsua_acc_id *acc_id)
     cfg.cred_info[0].data_type = PJSIP_CRED_DATA_PLAIN_PASSWD;
     cfg.cred_info[0].data = pj_str(SIP_PASSWD);
 
-
     status = pjsua_acc_add(&cfg, PJ_TRUE, acc_id);
     if (status != PJ_SUCCESS) error_exit("Error adding account", status);
 
+    return status;
+}
+
+static pj_status_t answ_phone_play_msg(pjsua_call_id *call_id)
+{
+    pjsua_call_info ci;
+    pjsua_call_get_info(*call_id, &ci);
+
+    pjsua_player_id player_id;
+    pj_status_t status;
+    const pj_str_t filename = pj_str(AUDIO_MSG);
+
+    status = pjsua_player_create(&filename, PJMEDIA_FILE_NO_LOOP, &player_id);
+    if (status != PJ_SUCCESS)
+        return status;
+
+    ci.conf_slot = pjsua_call_get_conf_port(player_id);
+    status = pjsua_conf_connect(pjsua_player_get_conf_port(player_id),
+                ci.conf_slot); /* why not call id? */
+
+    return status;
+}
+
+/* doesn't work because I lost my mind with tonegen */
+static pj_status_t answ_phone_play_ringtone(pjsua_call_id *call_id)
+{   
+    pjsua_call_info ci;
+    pjsua_call_get_info(*call_id, &ci);
+
+    pj_status_t status;
+    pjmedia_tone_desc ringtone[0];
+    pj_pool_t *pool_tone =  pjsua_pool_create("answ_phone", 100, 100);
+    pjmedia_port *tonegen;
+    pjsua_conf_port_id *p_id;
+
+    /* set ringtone desc */
+    ringtone[0].freq1 = 425;
+    ringtone[0].on_msec = 10000;
+    ringtone[0].off_msec = 1000;
+    ringtone[0].volume = PJMEDIA_TONEGEN_VOLUME;
+    ringtone[0].flags = 0;
+
+    /* create port tonegen */
+    status = pjmedia_tonegen_create(pool_tone, 425, 1, 160, 16, PJMEDIA_TONEGEN_LOOP, &tonegen);
+    if (status != PJ_SUCCESS)
+    {
+        pjsua_perror(THIS_FILE, "Unable to create tone generator", status);
+    }
+
+    status = pjsua_conf_add_port(pool_tone, tonegen, p_id);
+    if (status != PJ_SUCCESS)
+    {
+        error_exit("pjsua_conf_add_port() error", status);
+    }
+
+    status = pjsua_conf_connect(*p_id, ci.conf_slot);
+    if (status != PJ_SUCCESS)
+    {
+        error_exit("pjsua_conf_connect() error", status);
+    }
+
+    /* play tone */ 
+    status = pjmedia_tonegen_play(tonegen, 1, ringtone, PJMEDIA_TONEGEN_LOOP);
+    if (status != PJ_SUCCESS)
+    {
+        pjsua_perror(THIS_FILE, "Cannot play tone", status);
+    }
+    
     return status;
 }
 
@@ -160,6 +223,9 @@ static void on_incoming_call(pjsua_acc_id acc_id, pjsua_call_id call_id,
                  pjsip_rx_data *rdata)
 {
     pjsua_call_info ci;
+    pj_status_t status;
+    pjsua_call_id current_call;
+    //const pjsua_msg_data msg_data = pj_str("I'm not home, call later");
 
     /* set arg to void */
     PJ_UNUSED_ARG(acc_id); 
@@ -167,10 +233,19 @@ static void on_incoming_call(pjsua_acc_id acc_id, pjsua_call_id call_id,
 
     pjsua_call_get_info(call_id, &ci);
 
+    if (current_call == PJSUA_INVALID_ID)
+    {
+        current_call = call_id;
+    }
+
     PJ_LOG(3,(THIS_FILE, "Incoming call from %.*s!!", (int)ci.remote_info.slen,
              ci.remote_info.ptr));
 
-    /* Automatically answer incoming calls with 200/OK */
+    /* ringing for connect hosts */
+    pjsua_call_answer(call_id, 180, NULL, NULL);
+    sleep(8);
+
+    /* Answer on incoming calls with 200/OK */
     pjsua_call_answer(call_id, 200, NULL, NULL);
 }
 
@@ -188,14 +263,14 @@ static void on_call_state(pjsua_call_id call_id, pjsip_event *e)
 static void on_call_media_state(pjsua_call_id call_id)
 {
     pjsua_call_info ci;
-
     pjsua_call_get_info(call_id, &ci);
-
-    printf("Check audio devices/n");
+    
     if (ci.media_status == PJSUA_CALL_MEDIA_ACTIVE)
     {
         // When media is active, connect call to sound device.
-        pjsua_conf_connect(ci.conf_slot, 0);
-        pjsua_conf_connect(0, ci.conf_slot);
+        answ_phone_play_msg(&call_id);
+
+        /* not working */
+        //answ_phone_play_ringtone(&call_id);
     }
 }
