@@ -39,6 +39,9 @@ static pj_status_t answ_phone_main_init(void)
     status = answ_phone_init_sip_acc();
     if (status != PJ_SUCCESS) error_exit("Error init_sip_acc()", status);
 
+    status = answ_phone_init_ring();
+    if (status != PJ_SUCCESS) error_exit("Error in init_ring()", status);
+
     return status;
 }
 
@@ -96,17 +99,25 @@ static pj_status_t answ_phone_init_pjsua(void)
     pjsua_config ua_cfg; //for user agent behavior
     pjsua_logging_config log_cfg;//for log
     pjsua_media_config media_cfg;//for media
-    pj_status_t stat;
+    pj_status_t status;
     // pj_time_val delay;
 
     //create pjsua
-    stat = pjsua_create();
-    if (stat != PJ_SUCCESS)
+    status = pjsua_create();
+    if (status != PJ_SUCCESS)
     {
-        pjsua_perror(THIS_FILE, "Error initiate pjsua!", stat);
-        return stat;
+        pjsua_perror(THIS_FILE, "Error initiate pjsua!", status);
+        return status;
     }
 
+    /* what? */
+    pj_timer_entry_init(&app_cfg.hangup_timer, 0, NULL,
+                        &call_timeout_callback);
+
+    if (pj_timer_entry_running(&app_cfg.hangup_timer))
+    {
+        PJ_LOG(3, (THIS_FILE, "TIMER RUNNING"));
+    }
     /* pool for all application */
     app_cfg.pool = pjsua_pool_create("tone-pool", 100, 100);
     PJ_LOG(3, (THIS_FILE,   "pName: %s, "
@@ -125,8 +136,8 @@ static pj_status_t answ_phone_init_pjsua(void)
     media_cfg.snd_rec_latency = PJMEDIA_SND_DEFAULT_REC_LATENCY;
     media_cfg.snd_play_latency = PJMEDIA_SND_DEFAULT_PLAY_LATENCY;
 
-    // stat = answ_phone_init_ring();
-    // if (stat != PJ_SUCCESS) error_exit("Error in init_ring()", stat);
+    // status = answ_phone_init_ring();
+    // if (status != PJ_SUCCESS) error_exit("Error in init_ring()", status);
 
     // /* Initialize calls data */
     // for (int i = 0; i < PJ_ARRAY_SIZE(app_cfg.call_data); i++) 
@@ -143,30 +154,12 @@ static pj_status_t answ_phone_init_pjsua(void)
     ua_cfg.cb.on_call_media_state = &on_call_media_state;
     ua_cfg.cb.on_incoming_call = &on_incoming_call;
 
-    // /* set timer to hangup calls */
-    // if (app_cfg.hangup_timer.id == 1)
-    // {
-    //     return;
-    // }
-
-    // app_cfg.hangup_timer.id = 1;
-    // delay.sec = 0;
-    // delay.msec = 200;
-    // pjsip_endpt_schedule_timer(pjsua_get_pjsip_endpt(), 
-    //                         &app_cfg.hangup_timer, &delay);
-
-    pj_timer_entry_init(&app_cfg.hangup_timer, 0, NULL,
-                        &hangup_timeout_callback);
-
     log_cfg.console_level = 4;
 
-    stat = pjsua_init(&ua_cfg, &log_cfg, &media_cfg);
-    if (stat != PJ_SUCCESS) error_exit("Error in pjsua_init()", stat);
+    status = pjsua_init(&ua_cfg, &log_cfg, &media_cfg);
+    if (status != PJ_SUCCESS) error_exit("Error in pjsua_init()", status);
 
-    stat = answ_phone_init_ring();
-    if (stat != PJ_SUCCESS) error_exit("Error in init_ring()", stat);
-
-    return stat;
+    return status;
 }
 
 /* Auto hangup timer callback */
@@ -304,6 +297,11 @@ static void on_incoming_call(pjsua_acc_id acc_id, pjsua_call_id call_id,
           (int)ci.local_info.slen,
           ci.local_info.ptr));
     }
+
+    /* change sleep on cool timer created by pjsua-lib */
+    sleep(4);
+    pjsua_call_answer(call_id, 200, NULL, NULL);
+
 }
 
 static void on_call_state(pjsua_call_id call_id, pjsip_event *e)
@@ -334,14 +332,6 @@ static void on_call_state(pjsua_call_id call_id, pjsip_event *e)
             ci.last_status_text.ptr));
 
         /* there is check on curent calling */
-
-        // /* Dump media state upon disconnected */
-        // if (1)
-        // {
-        //     PJ_LOG(5, (THIS_FILE, "Call %d disconnected, dump media state..",
-        //         call_id));
-        //     log_call_dump(call_id);
-        // }
     }
     else
     {
@@ -410,16 +400,16 @@ static void on_call_media_state(pjsua_call_id call_id)
     PJ_LOG(3, (THIS_FILE, "Media status changed %d", app_cfg.ci.media_status));
     ring_stop(call_id);
 
-    // if (app_cfg.ci.media_status == PJSUA_CALL_MEDIA_ACTIVE)
-    // {
-    //     // When media is active, connect call to sound device.
-    //     status = answ_phone_play_lbeep();
-    //     if (status != PJ_SUCCESS)
-    //     {
-    //         pjsua_perror(THIS_FILE, "Error in play_lbeep", status);
-    //     }
-    //     //answ_phone_play_msg(app_cfg.all_id);
-    // }
+    if (app_cfg.ci.media_status == PJSUA_CALL_MEDIA_ACTIVE)
+    {
+        // When media is active, connect call to sound device.
+        status = answ_phone_play_lbeep();
+        if (status != PJ_SUCCESS)
+        {
+            pjsua_perror(THIS_FILE, "Error in play_lbeep", status);
+        }
+        //answ_phone_play_msg(app_cfg.all_id);
+    }
 
     //pj_pool_release(app_cfg.pool);
     PJ_LOG(3, (THIS_FILE,   "pName: %s, "

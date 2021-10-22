@@ -8,7 +8,6 @@
 #include <pjsip_simple.h>
 #include <pjsip_ua.h>
 #include <pjsua-lib/pjsua.h>
-
 #include <unistd.h>
 
 #define THIS_FILE    "MY_PHONE"
