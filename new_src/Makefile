@@ -1,5 +1,5 @@
 #Modify this to point to the PJSIP location.
-PJBASE=/home/vlbrazhnik/wortex/eltex_answer_machine/pjproject-2.10
+PJBASE=/home/vlbrazhnikov/Local_Rep/eltex_answer_machine/pjproject-2.10
 
 include $(PJBASE)/build.mak
 
@@ -14,7 +14,7 @@ CPPFLAGS= ${CFLAGS}
 all: answ_machine  
 
 myapp: answ_machine.c
-	$(CC) -o -g -Wall -Wextra $@ $< $(CPPFLAGS) $(LDFLAGS) $(LDLIBS)
+	$(CC) -o2 -g -Wall -Wextra $@ $< $(CPPFLAGS) $(LDFLAGS) $(LDLIBS)
 
 clean:
 	rm -f answ_machine.o answ_machine
