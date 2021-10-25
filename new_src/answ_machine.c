@@ -77,18 +77,29 @@ static pj_status_t answ_phone_main_loop(void)
         }
     }
 
-    /*+++++++++++++++++++++++++++++++++++++++++++++++++++ */
-    /* should I free media port? */
-    // error with pelease pool
+    if (app_cfg.no_tones == PJ_TRUE)
+    {
+        status = pjsua_conf_disconnect(app_cfg.conf_mslot, pjsua_call_get_conf_port(app_cfg.call_id));
+        if (status != PJ_SUCCESS)
+        {
+            error_exit("conf_disconnect", status);
+        }
 
-    // pj_pool_safe_release(&app_cfg.pool);
-    // // app_cfg.pool = NULL;
+        status = pjsua_conf_remove_port(app_cfg.conf_mslot);
+        if (status != PJ_SUCCESS)
+        {
+            error_exit("Error remove_app.conf_mslot()", status);
+        }
+    }
 
     status = pjsua_destroy();
     if (status != PJ_SUCCESS)
     {
         error_exit("Error in pjsua_destroy()", status);
     }
+
+    pj_pool_safe_release(&app_cfg.pool);
+    app_cfg.pool = NULL;
 
     return status;
 }
@@ -100,7 +111,6 @@ static pj_status_t answ_phone_init_pjsua(void)
     pjsua_logging_config log_cfg;//for log
     pjsua_media_config media_cfg;//for media
     pj_status_t status;
-    // pj_time_val delay;
 
     //create pjsua
     status = pjsua_create();
@@ -108,24 +118,6 @@ static pj_status_t answ_phone_init_pjsua(void)
     {
         pjsua_perror(THIS_FILE, "Error initiate pjsua!", status);
         return status;
-    }
-
-    /* Initialize calls data */
-    for (int i = 0; i < PJ_ARRAY_SIZE(app_cfg.call_data); i++) 
-    {
-        app_cfg.call_data[i].timer.id = PJSUA_INVALID_ID;
-        app_cfg.call_data[i].timer.cb = &call_timeout_callback;
-    }
-    app_cfg.duration = 4000;
-
-    /* Setup hangup_timer? */
-    pj_timer_entry_init(&app_cfg.hangup_timer, 0, &app_cfg.duration,
-                        &hangup_timeout_callback);
-
-    status = pj_timer_entry_running(&app_cfg.hangup_timer);
-    if ( status != PJ_SUCCESS)
-    {
-        PJ_LOG(3, (THIS_FILE, "TIMER NOT RUNNING"));
     }
 
     /* pool for all application */
@@ -142,13 +134,6 @@ static pj_status_t answ_phone_init_pjsua(void)
     pjsua_logging_config_default(&log_cfg);
     pjsua_media_config_default(&media_cfg);
 
-    media_cfg.snd_clock_rate = 0;
-    media_cfg.snd_rec_latency = PJMEDIA_SND_DEFAULT_REC_LATENCY;
-    media_cfg.snd_play_latency = PJMEDIA_SND_DEFAULT_PLAY_LATENCY;
-
-    // status = answ_phone_init_ring();
-    // if (status != PJ_SUCCESS) error_exit("Error in init_ring()", status);
-
     //set callback 
     ua_cfg.cb.on_call_state = &on_call_state;
     ua_cfg.cb.on_call_media_state = &on_call_media_state;
@@ -160,17 +145,6 @@ static pj_status_t answ_phone_init_pjsua(void)
     if (status != PJ_SUCCESS) error_exit("Error in pjsua_init()", status);
 
     return status;
-}
-
-/* Auto hangup timer callback */
-static void hangup_timeout_callback(pj_timer_heap_t *timer_heap,
-                    struct pj_timer_entry *entry)
-{
-    PJ_UNUSED_ARG(timer_heap);
-    PJ_UNUSED_ARG(entry);
-
-    app_cfg.hangup_timer.id = 0;
-    pjsua_call_hangup_all();
 }
 
 static pj_status_t answ_phone_init_transport(void)
@@ -203,8 +177,6 @@ static pj_status_t answ_phone_init_sip_acc(void)
     cfg.cred_info[0].realm = pj_str(SIP_DOMAIN);
     cfg.cred_info[0].scheme = pj_str("call");
     cfg.cred_info[0].username = pj_str(SIP_USER);
-    // cfg.cred_info[0].data_type = PJSIP_CRED_DATA_PLAIN_PASSWD;
-    // cfg.cred_info[0].data = pj_str(SIP_PASSWD);
 
     status = pjsua_acc_add(&cfg, PJ_TRUE, NULL);
     if (status != PJ_SUCCESS) error_exit("Error adding account", status);
@@ -215,6 +187,7 @@ static pj_status_t answ_phone_init_sip_acc(void)
 static pj_status_t answ_phone_play_lbeep(void)
 {
     pj_status_t status;
+
     /* set param of long beep */
     pjmedia_tone_desc tones[1];
     tones[0].freq1 = 425;
@@ -266,7 +239,6 @@ static pj_status_t answ_phone_play_lbeep(void)
 static void on_incoming_call(pjsua_acc_id acc_id, pjsua_call_id call_id,
                  pjsip_rx_data *rdata)
 {
-    pj_status_t status;
     pjsua_call_info ci;
     pjsua_call_get_info(call_id, &ci);
 
@@ -275,22 +247,81 @@ static void on_incoming_call(pjsua_acc_id acc_id, pjsua_call_id call_id,
     PJ_UNUSED_ARG(rdata);
 
     /* Start ringing*/
-    if (ci.rem_aud_cnt)
-    {
-        ring_start(call_id);
-    }
+    // if (ci.rem_aud_cnt)
+    // {
+    //     ring_start(call_id);
+    // }
 
     PJ_LOG(3,(THIS_FILE,
       "Incoming call for account %d!\n"
       "Media count: %d audio!\n"
       "From: %.*s\n"
       "To: %.*s\n",
-      call_id, //there was acc_id
+      acc_id,
       ci.rem_aud_cnt,
       (int)ci.remote_info.slen,
       ci.remote_info.ptr,
       (int)ci.local_info.slen,
       ci.local_info.ptr));
+
+    answ_phone_delay_answer(call_id);
+}
+
+static void answ_phone_delay_answer(pjsua_call_id call_id)
+{
+    pj_status_t status;
+    app_cfg.delay = PJSUA_DELAY_TIME;
+
+    if (app_cfg.delay)
+    {
+        pj_time_val delay;
+        for (pj_int32_t i = 0; i < PJ_ARRAY_SIZE(app_cfg.call_data); i++)
+        {
+            app_cfg.call_data[i].timer.id = (pj_timer_id_t)i + 1;
+            app_cfg.call_data[i].timer.cb = &answer_timer_cb;
+        }
+        delay.sec = 0;
+        delay.msec = app_cfg.delay;
+        pj_time_val_normalize(&delay);
+
+        app_call_data *cd = &app_cfg.call_data[call_id];
+        cd->timer.id = call_id;
+        pjsip_endpoint *endpt = pjsua_get_pjsip_endpt();
+        status = pjsip_endpt_schedule_timer(endpt, &cd->timer, &delay);
+        if (status != PJ_SUCCESS)
+        {
+            error_exit("Error scheduler", status);
+        }
+    }
+    else
+    {
+        status = pjsua_call_answer(call_id, 200, NULL, NULL);
+        if (status != PJ_SUCCESS)
+        {
+            error_exit("Error call_answer_200()", status);
+        }
+    }
+}
+
+static void answer_timer_cb(pj_timer_heap_t *h, pj_timer_entry *entry)
+{
+    pj_status_t status;
+    pjsua_call_id call_id;
+    PJ_UNUSED_ARG(h);
+
+    call_id = entry->id;
+    if (call_id == PJSUA_INVALID_ID) 
+    {
+        PJ_LOG(1,(THIS_FILE, "Invalid call ID in timer callback"));
+        status = PJ_FALSE;
+        error_exit("Error Invalid call id", status);
+    }
+
+    status = pjsua_call_answer(call_id, 200, NULL, NULL);
+    if (status != PJ_SUCCESS)
+    {
+        error_exit("Error call_answer_200() ", status);
+    }
 }
 
 static void on_call_state(pjsua_call_id call_id, pjsip_event *e)
@@ -302,81 +333,11 @@ static void on_call_state(pjsua_call_id call_id, pjsip_event *e)
 
     if (ci.state == PJSIP_INV_STATE_DISCONNECTED)
     {
-        ring_stop(call_id);
-
-        /* cancel duration timer, if any */
-        if (app_cfg.call_data[call_id].timer.id != PJSUA_INVALID_ID)
-        {
-            app_call_data *cd = &app_cfg.call_data[call_id];
-            pjsip_endpoint *endpt = pjsua_get_pjsip_endpt();
-
-            cd->timer.id = PJSUA_INVALID_ID;
-            pjsip_endpt_cancel_timer(endpt, &cd->timer);
-        }
-
         PJ_LOG(3, (THIS_FILE, "Call %d is DISCONNECTED [reason=%d (%.*s)]",
             call_id, 
             ci.last_status,
             (int)ci.last_status_text.slen,
             ci.last_status_text.ptr));
-
-        /* there is check on curent calling */
-    }
-    else
-    {
-        if (app_cfg.duration != PJSUA_APP_NO_LIMIT_DURATION && 
-            ci.state ==  PJSIP_INV_STATE_CONFIRMED)
-        {
-            // Schedule timer to hangup call after duration
-            app_call_data *cd = &app_cfg.call_data[call_id];
-            pjsip_endpoint *endpt = pjsua_get_pjsip_endpt();
-            pj_time_val delay;
-
-            cd->timer.id = call_id;
-            delay.sec = app_cfg.duration;
-            delay.msec = 0;
-            pjsip_endpt_schedule_timer(endpt, &cd->timer, &delay);
-        }
-
-        if (ci.state == PJSIP_INV_STATE_EARLY)
-        {
-            int code = 0;
-            pj_str_t reason;
-            pjsip_msg *msg;
-            /* This can only occur because of TX or RX message */
-            pj_assert(e->type == PJSIP_EVENT_TSX_STATE);
-            if (e->body.tsx_state.type == PJSIP_EVENT_RX_MSG) 
-            {
-                msg = e->body.tsx_state.src.rdata->msg_info.msg;
-            } 
-            else 
-            {
-                msg = e->body.tsx_state.src.tdata->msg;
-            }
-            code = msg->line.status.code;
-            reason = msg->line.status.reason;
-
-            /* Start ringing for 180 */
-            if (ci.role == PJSIP_ROLE_UAC && code == 180 && 
-                msg->body == NULL && ci.media_status == PJSUA_CALL_MEDIA_NONE)
-            {
-                ring_start(call_id);
-            }
-
-            PJ_LOG(3,(THIS_FILE, "Call %d state changed to %.*s (%d %.*s)", 
-              call_id, (int)ci.state_text.slen, 
-                      ci.state_text.ptr, code, 
-                      (int)reason.slen, reason.ptr));
-        }
-        else
-        {
-            PJ_LOG(3,(THIS_FILE, "Call %d state changed to %.*s", 
-              call_id,
-              (int)ci.state_text.slen,
-              ci.state_text.ptr));
-        }
-        // if (current_call == PJSUA_INVALID_ID)
-        // current_call = call_id;
     }
 }
 
@@ -387,55 +348,23 @@ static void on_call_media_state(pjsua_call_id call_id)
     pjsua_call_get_info(app_cfg.call_id, &app_cfg.ci);
 
     PJ_LOG(3, (THIS_FILE, "Media status changed %d", app_cfg.ci.media_status));
-    ring_stop(call_id);
 
-    if (app_cfg.ci.media_status == PJSUA_CALL_MEDIA_ACTIVE)
+    /* stop ringing */
+    //ring_stop(call_id);
+
+    // When media is active, connect call to sound device.
+    status = answ_phone_play_lbeep();
+    if (status != PJ_SUCCESS)
     {
-        // When media is active, connect call to sound device.
-        status = answ_phone_play_lbeep();
-        if (status != PJ_SUCCESS)
-        {
-            pjsua_perror(THIS_FILE, "Error in play_lbeep", status);
-        }
-        //answ_phone_play_msg(app_cfg.all_id);
+        pjsua_perror(THIS_FILE, "Error in play_lbeep", status); 
     }
-
-    //pj_pool_release(app_cfg.pool);
+    // pj_pool_release(app_cfg.pool);
     PJ_LOG(3, (THIS_FILE,   "pName: %s, "
                             "pCap AF_RELEASE: %u, " 
                             "pBlockSize: %u",
                             app_cfg.pool->obj_name, 
                             app_cfg.pool->capacity,
                             app_cfg.pool->increment_size));
-}
-
-static void call_timeout_callback(pj_timer_heap_t *timer_heap, 
-                                struct pj_timer_entry *entry)
-{
-    pjsua_call_id call_id = entry->id;
-    pjsua_msg_data msg_data_;
-    pjsip_generic_string_hdr warn;
-    pj_str_t hname = pj_str("Warning");
-    pj_str_t hvalue = pj_str("399 pjsua \"Call duration exceeded\"");
-
-    PJ_UNUSED_ARG(timer_heap);
-
-    if (call_id == PJSUA_INVALID_ID) {
-    PJ_LOG(1,(THIS_FILE, "Invalid call ID in timer callback"));
-    return;
-    }
-    
-    /* Add warning header */
-    pjsua_msg_data_init(&msg_data_);
-    pjsip_generic_string_hdr_init2(&warn, &hname, &hvalue);
-    pj_list_push_back(&msg_data_.hdr_list, &warn);
-
-    /* Call duration has been exceeded; disconnect the call */
-    PJ_LOG(3,(THIS_FILE, "Duration (%d seconds) has been exceeded "
-             "for call %d, disconnecting the call",
-             app_cfg.duration, call_id));
-    entry->id = PJSUA_INVALID_ID;
-    pjsua_call_hangup(call_id, 200, NULL, &msg_data_);
 }
 
 static void ring_start(pjsua_call_id call_id)
@@ -446,7 +375,7 @@ static void ring_start(pjsua_call_id call_id)
 
     app_cfg.call_data[call_id].ring_on = PJ_TRUE;
 
-    pjsua_conf_connect(app_cfg.ring_slot, 0);
+    pjsua_conf_connect(app_cfg.ring_slot, 0); /* pjsua_call_get_conf_port(call_id) */
 }
 
 static void ring_stop(pjsua_call_id call_id)
@@ -460,10 +389,16 @@ static void ring_stop(pjsua_call_id call_id)
         app_cfg.call_data[call_id].ringback_on = PJ_FALSE;
     }
 
-    status = pjsua_conf_disconnect(app_cfg.ring_slot, 0);
+    status = pjsua_conf_disconnect(app_cfg.ring_slot, 0); 
     if (status != PJ_SUCCESS)
     {
         error_exit("ring_stop", status);
+    }
+
+    status = pjsua_conf_remove_port(app_cfg.ring_slot);
+    if (status != PJ_SUCCESS)
+    {
+        error_exit("Error remove_ring_slot()", status);
     }
 
     pjmedia_tonegen_rewind(app_cfg.ring_port);
@@ -478,22 +413,21 @@ static pj_status_t answ_phone_init_ring(void)
     {
         pj_str_t name = pj_str("ring_on");
         status = pjmedia_tonegen_create2(app_cfg.pool, &name, 8000, 1, 
-                                        160, 16, 0, &app_cfg.ring_port);
+                                        160, 16, PJMEDIA_TONEGEN_LOOP, &app_cfg.ring_port);
         if (status != PJ_SUCCESS)
         {
             error_exit("Error in init_ring() tone create", status);
         }
 
         /* describe tone */
-        tone[0].freq1 = 850;
-        tone[0].freq2 = 100;
-        tone[0].on_msec = 500;
-        tone[0].off_msec = 1000;
+        tone[0].freq1 = 425;
+        tone[0].freq2 = 0;
+        tone[0].on_msec = 1000;
+        tone[0].off_msec = 4000;
         tone[0].volume = PJMEDIA_TONEGEN_VOLUME;
         tone[0].flags = 0;
 
-        status = pjmedia_tonegen_play(app_cfg.ring_port, 1, tone, 
-                                    PJMEDIA_TONEGEN_LOOP);
+        status = pjmedia_tonegen_play(app_cfg.ring_port, 1, tone, 0);
         if (status != PJ_SUCCESS)
         {
             error_exit("Error in init_ring() tone play", status);
@@ -503,8 +437,50 @@ static pj_status_t answ_phone_init_ring(void)
         if (status != PJ_SUCCESS)
         {
             error_exit("Error in init_ring() add port", status);
-
         }
     }
     return status;
 }
+
+/*static void sleep_start(void)
+{
+    pj_status_t status;
+    app_cfg.duration = 4000;
+    pj_uint32_t msec;
+    enum { MIS = 20};
+
+    PJ_LOG(3, (THIS_FILE, "...sleep"));
+
+    //mark start of sleep
+    status = pj_gettimeofday(&app_cfg.start);
+    if (status != PJ_SUCCESS)
+    {
+        error_exit("Error in sleep_start()", status);
+    }
+
+    //sleep
+    status = pj_thread_sleep(app_cfg.duration);
+    if (status != PJ_SUCCESS)
+    {
+        error_exit("Error in thread_sleep()", status);
+    }
+    //mark end of sleep
+    status = pj_gettimeofday(&app_cfg.stop);
+    if (status != PJ_SUCCESS)
+    {
+        error_exit("Error in sleep_stop()", status);
+    }
+    PJ_TIME_VAL_SUB(app_cfg.stop, app_cfg.start);
+    msec = PJ_TIME_VAL_MSEC(app_cfg.stop);
+
+     // Check if it's within range. 
+    if (msec < app_cfg.duration * (100-MIS)/100 ||
+        msec > app_cfg.duration * (100+MIS)/100)
+    {
+        PJ_LOG(3,(THIS_FILE, 
+              "...error: slept for %d ms instead of %d ms "
+              "(outside %d%% err window)",
+              msec, app_cfg.duration, MIS));
+        error_exit("Error in time_range", status);
+    }
+}*/

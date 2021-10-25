@@ -21,7 +21,7 @@
 
 #define N_TRANSPORT_IDS 3
 
-#define PJSUA_TRANSPORT_RESTART_DELAY_TIME 10
+#define PJSUA_DELAY_TIME 10000
 
 #define PJSUA_APP_NO_LIMIT_DURATION (int)0x7FFFFFFF
 
@@ -35,34 +35,27 @@ typedef struct app_call_data
 
 struct app_confg_t
 {
-    pjsua_call_info ci;
-    pjsua_call_id call_id;
-    pjsua_conf_port_id conf_mslot;
+    pjsua_call_info     ci;
+    pjsua_call_id       call_id;
+    pjsua_conf_port_id  conf_mslot;
 
-    pj_pool_t *pool;
-    pjmedia_port *lbeep;
+    pj_pool_t           *pool;
+    pjmedia_port        *lbeep;
 
     pjmedia_tone_desc tones[1];
 
-    pj_bool_t no_tones;
+    pj_bool_t           no_tones;
+    pjsua_conf_port_id  ring_slot;
+    pjmedia_port        *ring_port;
+    app_call_data       call_data[1];
+    pj_time_val         start;
+    pj_time_val         stop;
+    unsigned            duration;
+    unsigned            delay;
     // pjsua_conf_port_id ringback_slot;
     // int ringback_cnt;
     // pjmedia_port *ringback_port;
-
-    pjsua_conf_port_id ring_slot;
     // int ring_cnt;
-    pjmedia_port *ring_port;
-
-    // app_call_data call_data[PJSUA_MAX_CALLS];
-    app_call_data call_data[1];
-    // pj_time_val         start;
-    // pj_time_val         stop;
-    // unsigned            duration[] = { 2000, 1000};
-
-    unsigned duration;
-    unsigned auto_answer;
-    pj_timer_entry hangup_timer;
-
 } app_cfg;
 
 /* for all application */
@@ -75,18 +68,20 @@ static pj_status_t answ_phone_init_transport(void);
 static pj_status_t answ_phone_init_sip_acc(void);
 static pj_status_t answ_phone_main_loop(void);
 static pj_status_t answ_phone_play_lbeep(void);
-// static pj_status_t answ_phone_play_msg(pjsua_call_id call_id);
 
-/* for 180 ringing */
+
+/* for ringing */
 static pj_status_t answ_phone_init_ring(void);
-// static void ringback_start(pjsua_call_id call_id);
 static void ring_start(pjsua_call_id call_id);
 static void ring_stop(pjsua_call_id call_id);
+static void answ_phone_delay_answer(pjsua_call_id call_id);
 
+static void answer_timer_cb(pj_timer_heap_t *h, pj_timer_entry *entry);
 static void on_incoming_call(pjsua_acc_id acc_id, pjsua_call_id call_id,
                             pjsip_rx_data *rdata);
 static void on_call_state(pjsua_call_id call_id, pjsip_event *e);
 static void on_call_media_state(pjsua_call_id call_id);
 static void error_exit(const char *title, pj_status_t status);
-static void call_timeout_callback(pj_timer_heap_t *timer_heap, struct pj_timer_entry *entry);
-static void hangup_timeout_callback(pj_timer_heap_t *timer_heap, struct pj_timer_entry *entry);
+
+// static void sleep_start(void);
+
