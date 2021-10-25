@@ -110,14 +110,24 @@ static pj_status_t answ_phone_init_pjsua(void)
         return status;
     }
 
-    /* what? */
-    pj_timer_entry_init(&app_cfg.hangup_timer, 0, NULL,
-                        &call_timeout_callback);
-
-    if (pj_timer_entry_running(&app_cfg.hangup_timer))
+    /* Initialize calls data */
+    for (int i = 0; i < PJ_ARRAY_SIZE(app_cfg.call_data); i++) 
     {
-        PJ_LOG(3, (THIS_FILE, "TIMER RUNNING"));
+        app_cfg.call_data[i].timer.id = PJSUA_INVALID_ID;
+        app_cfg.call_data[i].timer.cb = &call_timeout_callback;
     }
+    app_cfg.duration = 4000;
+
+    /* Setup hangup_timer? */
+    pj_timer_entry_init(&app_cfg.hangup_timer, 0, &app_cfg.duration,
+                        &hangup_timeout_callback);
+
+    status = pj_timer_entry_running(&app_cfg.hangup_timer);
+    if ( status != PJ_SUCCESS)
+    {
+        PJ_LOG(3, (THIS_FILE, "TIMER NOT RUNNING"));
+    }
+
     /* pool for all application */
     app_cfg.pool = pjsua_pool_create("tone-pool", 100, 100);
     PJ_LOG(3, (THIS_FILE,   "pName: %s, "
@@ -138,16 +148,6 @@ static pj_status_t answ_phone_init_pjsua(void)
 
     // status = answ_phone_init_ring();
     // if (status != PJ_SUCCESS) error_exit("Error in init_ring()", status);
-
-    // /* Initialize calls data */
-    // for (int i = 0; i < PJ_ARRAY_SIZE(app_cfg.call_data); i++) 
-    // {
-    //     app_cfg.call_data[i].timer.id = PJSUA_INVALID_ID;
-    //     app_cfg.call_data[i].timer.cb = &call_timeout_callback;
-    // }
-
-    app_cfg.call_data[0].timer.id = PJSUA_INVALID_ID;
-    app_cfg.call_data[0].timer.cb = &call_timeout_callback;
 
     //set callback 
     ua_cfg.cb.on_call_state = &on_call_state;
@@ -274,34 +274,23 @@ static void on_incoming_call(pjsua_acc_id acc_id, pjsua_call_id call_id,
     PJ_UNUSED_ARG(acc_id); 
     PJ_UNUSED_ARG(rdata);
 
-    // PJ_LOG(3,(THIS_FILE, "Incoming call from %.*s!", (int)ci.remote_info.slen,
-    //          ci.remote_info.ptr));
-
     /* Start ringing*/
     if (ci.rem_aud_cnt)
     {
         ring_start(call_id);
     }
 
-    if (app_cfg.auto_answer < 200)
-    {
-        PJ_LOG(3,(THIS_FILE,
-          "Incoming call for account %d!\n"
-          "Media count: %d audio!\n"
-          "From: %.*s\n"
-          "To: %.*s\n",
-          acc_id,
-          ci.rem_aud_cnt,
-          (int)ci.remote_info.slen,
-          ci.remote_info.ptr,
-          (int)ci.local_info.slen,
-          ci.local_info.ptr));
-    }
-
-    /* change sleep on cool timer created by pjsua-lib */
-    sleep(4);
-    pjsua_call_answer(call_id, 200, NULL, NULL);
-
+    PJ_LOG(3,(THIS_FILE,
+      "Incoming call for account %d!\n"
+      "Media count: %d audio!\n"
+      "From: %.*s\n"
+      "To: %.*s\n",
+      call_id, //there was acc_id
+      ci.rem_aud_cnt,
+      (int)ci.remote_info.slen,
+      ci.remote_info.ptr,
+      (int)ci.local_info.slen,
+      ci.local_info.ptr));
 }
 
 static void on_call_state(pjsua_call_id call_id, pjsip_event *e)
@@ -335,7 +324,7 @@ static void on_call_state(pjsua_call_id call_id, pjsip_event *e)
     }
     else
     {
-        if (/*app_cfg.duration != PJSUA_APP_NO_LIMIT_DURATION && */
+        if (app_cfg.duration != PJSUA_APP_NO_LIMIT_DURATION && 
             ci.state ==  PJSIP_INV_STATE_CONFIRMED)
         {
             // Schedule timer to hangup call after duration

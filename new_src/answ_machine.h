@@ -1,3 +1,4 @@
+#pragma once
 /* PJSUA framework */
 #include <pjlib.h>
 #include <pjlib-util.h>
@@ -22,7 +23,7 @@
 
 #define PJSUA_TRANSPORT_RESTART_DELAY_TIME 10
 
-#define PJSUA_APP_NO_LIMIT_DURATION (int)0xFF
+#define PJSUA_APP_NO_LIMIT_DURATION (int)0x7FFFFFFF
 
 /* Call specific data */
 typedef struct app_call_data
@@ -51,7 +52,13 @@ struct app_confg_t
     pjsua_conf_port_id ring_slot;
     // int ring_cnt;
     pjmedia_port *ring_port;
-    app_call_data call_data[PJSUA_MAX_CALLS];
+
+    // app_call_data call_data[PJSUA_MAX_CALLS];
+    app_call_data call_data[1];
+    // pj_time_val         start;
+    // pj_time_val         stop;
+    // unsigned            duration[] = { 2000, 1000};
+
     unsigned duration;
     unsigned auto_answer;
     pj_timer_entry hangup_timer;
@@ -72,7 +79,7 @@ static pj_status_t answ_phone_play_lbeep(void);
 
 /* for 180 ringing */
 static pj_status_t answ_phone_init_ring(void);
-static void ringback_start(pjsua_call_id call_id);
+// static void ringback_start(pjsua_call_id call_id);
 static void ring_start(pjsua_call_id call_id);
 static void ring_stop(pjsua_call_id call_id);
 
