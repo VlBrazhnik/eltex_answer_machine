@@ -13,17 +13,25 @@
 
 #define THIS_FILE    "MY_PHONE"
 #define AUDIO_MSG    "/home/vlbrazhnikov/Local_Rep/eltex_answer_machine/audio_msg/female.wav"
-#define MAX_TONES    2
-
 #define SIP_DOMAIN  "yourbakery"
 #define SIP_USER    "martin"
-// #define SIP_PASSWD  "cookie"
 
-#define N_TRANSPORT_IDS 3
+#define MAX_TONES           2
 
-#define PJSUA_DELAY_TIME 10000
+#define CLOCK_RATE          8000
+#define CHANNEL_COUNT       2
+#define SAMPLES_PER_FRAME   160
+#define BITS_PER_SAMPLE     16
 
-#define PJSUA_APP_NO_LIMIT_DURATION (int)0x7FFFFFFF
+#define FREQUENCY_1         425
+#define FREQUENCY_2         0
+#define RING_ON_MSEC        4000
+#define RING_OFF_MSEC       0
+#define PLAY_ON_MSEC        0
+#define PLAY_OFF_MSEC       0
+#define TONEGEN_FLAGS       0
+
+#define PJSUA_DELAY_TIME_MS 10000
 
 /* Call specific data */
 typedef struct app_call_data
@@ -42,12 +50,12 @@ struct app_confg_t
     pj_pool_t           *pool;
     pjmedia_port        *lbeep;
 
-    pjmedia_tone_desc tones[1];
+    pjmedia_tone_desc tones[MAX_TONES];
 
     pj_bool_t           no_tones;
     pjsua_conf_port_id  ring_slot;
     pjmedia_port        *ring_port;
-    app_call_data       call_data[1];
+    app_call_data       call_data[PJSUA_MAX_CALLS];
     pj_time_val         start;
     pj_time_val         stop;
     unsigned            duration;
@@ -67,21 +75,15 @@ static pj_status_t answ_phone_init_pjsua(void);
 static pj_status_t answ_phone_init_transport(void);
 static pj_status_t answ_phone_init_sip_acc(void);
 static pj_status_t answ_phone_main_loop(void);
-static pj_status_t answ_phone_play_lbeep(void);
-
-
-/* for ringing */
 static pj_status_t answ_phone_init_ring(void);
-static void ring_start(pjsua_call_id call_id);
-static void ring_stop(pjsua_call_id call_id);
-static void answ_phone_delay_answer(pjsua_call_id call_id);
 
+static void answer_phone_timeout_answer(pjsua_call_id call_id);
+static void answer_timeout_cb(pj_timer_heap_t *h, pj_timer_entry *entry);
+static void answ_phone_play_long_ring(void);
+static void answ_phone_delay_answer(pjsua_call_id call_id);
 static void answer_timer_cb(pj_timer_heap_t *h, pj_timer_entry *entry);
 static void on_incoming_call(pjsua_acc_id acc_id, pjsua_call_id call_id,
                             pjsip_rx_data *rdata);
 static void on_call_state(pjsua_call_id call_id, pjsip_event *e);
 static void on_call_media_state(pjsua_call_id call_id);
 static void error_exit(const char *title, pj_status_t status);
-
-// static void sleep_start(void);
-
