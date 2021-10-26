@@ -77,6 +77,12 @@ static pj_status_t answ_phone_main_loop(void)
         }
     }
 
+    status = pjsua_player_destroy(app_cfg.aud_player_id);
+    if (status != PJ_SUCCESS)
+    {
+        error_exit("Error in pjsua_player_destroy", status);
+    }
+
     status = pjsua_destroy();
     if (status != PJ_SUCCESS)
     {
@@ -291,7 +297,9 @@ static void on_call_media_state(pjsua_call_id call_id)
     PJ_LOG(3, (THIS_FILE, "Media status changed %d", ci.media_status));
 
     // When media is active, connect call to sound device.
-    answ_phone_play_long_ring();
+
+    // answ_phone_play_long_ring();
+    answ_phone_play_aud_msg(call_id);
 
     PJ_LOG(3, (THIS_FILE,   "pName: %s, "
                             "pCap AF_RELEASE: %u, " 
@@ -307,7 +315,7 @@ static void answ_phone_delay_answer(pjsua_call_id call_id)
     pj_time_val delay;
     app_cfg.duration_ms = PJSUA_DELAY_TIME_MS;
 
-    for (pj_int32_t i = 0; i < PJ_ARRAY_SIZE(app_cfg.call_data); i++) //найти конкретную дату вызова по call_id
+    for (pj_int32_t i = 0; i < PJ_ARRAY_SIZE(app_cfg.call_data); i++) 
     {
         app_cfg.call_data[i].answer_timer.id = PJSUA_INVALID_ID;
         app_cfg.call_data[i].answer_timer.cb = &answer_timer_cb;
@@ -348,19 +356,19 @@ static void answer_timer_cb(pj_timer_heap_t *h, pj_timer_entry *entry)
         error_exit("Error call_answer_200() ", status);
     }
 
-    answer_phone_timeout_answer(call_id);
+    answer_phone_release_answer(call_id);
 }
 
-static void answer_phone_timeout_answer(pjsua_call_id call_id)
+static void answer_phone_release_answer(pjsua_call_id call_id)
 {
     pj_status_t status;
     pj_time_val delay;
     app_cfg.duration_ms = PJSUA_RELEASE_TIME_MS;
 
-    for (pj_int32_t i = 0; i < PJ_ARRAY_SIZE(app_cfg.call_data); i++) //найти конкретную дату вызова по call_id
+    for (pj_int32_t i = 0; i < PJ_ARRAY_SIZE(app_cfg.call_data); i++)
     {
         app_cfg.call_data[i].release_timer.id = PJSUA_INVALID_ID;
-        app_cfg.call_data[i].release_timer.cb = &answer_timeout_cb;
+        app_cfg.call_data[i].release_timer.cb = &answer_release_cb;
     }
 
     delay.sec = 0;
@@ -378,7 +386,7 @@ static void answer_phone_timeout_answer(pjsua_call_id call_id)
     }
 }
 
-static void answer_timeout_cb(pj_timer_heap_t *h, pj_timer_entry *entry)
+static void answer_release_cb(pj_timer_heap_t *h, pj_timer_entry *entry)
 {
     pj_status_t status;
     pj_str_t reason = pj_str("Times out");
@@ -400,5 +408,25 @@ static void answer_timeout_cb(pj_timer_heap_t *h, pj_timer_entry *entry)
     if (status != PJ_SUCCESS)
     {
         error_exit("Error pjsua_call_hangup()", status);
+    }
+}
+
+static void answ_phone_play_aud_msg(pjsua_call_id call_id)
+{
+    pj_status_t status;
+    app_cfg.call_id = call_id;
+    const pj_str_t filename = pj_str(AUDIO_MSG);
+
+    status = pjsua_player_create(&filename, PJMEDIA_FILE_NO_LOOP, &app_cfg.aud_player_id);
+    if (status != PJ_SUCCESS)
+    {
+        error_exit("Error pjsua_player_create()", status);
+    }
+
+    status = pjsua_conf_connect(pjsua_player_get_conf_port(app_cfg.aud_player_id),
+                pjsua_call_get_conf_port(app_cfg.call_id));
+    if (status != PJ_SUCCESS)
+    {
+        error_exit("Error pjsua_conf_connect()", status);
     }
 }

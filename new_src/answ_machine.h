@@ -9,7 +9,6 @@
 #include <pjsip_simple.h>
 #include <pjsip_ua.h>
 #include <pjsua-lib/pjsua.h>
-#include <unistd.h>
 
 #define THIS_FILE    "MY_PHONE"
 #define AUDIO_MSG    "/home/vlbrazhnikov/Local_Rep/eltex_answer_machine/audio_msg/female.wav"
@@ -27,7 +26,7 @@
 
 #define FREQUENCY_1         425
 #define FREQUENCY_2         0
-#define RING_ON_MSEC        4000
+#define RING_ON_MSEC        3000
 #define RING_OFF_MSEC       0
 #define TONEGEN_FLAGS       0
 
@@ -51,13 +50,14 @@ struct app_confg_t
     pjmedia_tone_desc       tones[MAX_TONES];
     pjsua_conf_port_id      ring_slot;
     pjmedia_port            *ring_port;
+    pjsua_player_id         aud_player_id;
     app_call_data           call_data[MAX_CALLS];
     unsigned                duration_ms;
 } app_cfg;
 
 /* for all application */
 extern struct app_confg_t app_cfg;
-extern pjsua_call_id current_call;
+//extern pjsua_call_id current_call;
 
 static pj_status_t answ_phone_main_init(void);
 static pj_status_t answ_phone_init_pjsua(void);
@@ -66,8 +66,9 @@ static pj_status_t answ_phone_init_sip_acc(void);
 static pj_status_t answ_phone_main_loop(void);
 static pj_status_t answ_phone_init_ring(void);
 
-static void answer_phone_timeout_answer(pjsua_call_id call_id);
-static void answer_timeout_cb(pj_timer_heap_t *h, pj_timer_entry *entry);
+static void answ_phone_play_aud_msg(pjsua_call_id call_id);
+static void answer_phone_release_answer(pjsua_call_id call_id);
+static void answer_release_cb(pj_timer_heap_t *h, pj_timer_entry *entry);
 static void answ_phone_play_long_ring(void);
 static void answ_phone_delay_answer(pjsua_call_id call_id);
 static void answer_timer_cb(pj_timer_heap_t *h, pj_timer_entry *entry);
