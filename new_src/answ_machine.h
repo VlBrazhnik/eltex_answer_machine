@@ -15,8 +15,10 @@
 #define AUDIO_MSG    "/home/vlbrazhnikov/Local_Rep/eltex_answer_machine/audio_msg/female.wav"
 #define SIP_DOMAIN  "yourbakery"
 #define SIP_USER    "martin"
+#define LOG_TAB     "\n\t\t\t"
 
 #define MAX_TONES           2
+#define MAX_CALLS           10
 
 #define CLOCK_RATE          8000
 #define CHANNEL_COUNT       2
@@ -27,43 +29,30 @@
 #define FREQUENCY_2         0
 #define RING_ON_MSEC        4000
 #define RING_OFF_MSEC       0
-#define PLAY_ON_MSEC        0
-#define PLAY_OFF_MSEC       0
 #define TONEGEN_FLAGS       0
 
-#define PJSUA_DELAY_TIME_MS 10000
+#define PJSUA_DELAY_TIME_MS         10000
+#define PJSUA_RELEASE_TIME_MS       5000
 
 /* Call specific data */
 typedef struct app_call_data
 {
-    pj_timer_entry      timer;
-    pj_bool_t           ringback_on;
-    pj_bool_t           ring_on;
+    pj_timer_entry          answer_timer;//rename as answer_timer
+    pj_timer_entry          release_timer;
 } app_call_data;
 
 struct app_confg_t
 {
-    pjsua_call_info     ci;
-    pjsua_call_id       call_id;
-    pjsua_conf_port_id  conf_mslot;
-
-    pj_pool_t           *pool;
-    pjmedia_port        *lbeep;
-
-    pjmedia_tone_desc tones[MAX_TONES];
-
-    pj_bool_t           no_tones;
-    pjsua_conf_port_id  ring_slot;
-    pjmedia_port        *ring_port;
-    app_call_data       call_data[PJSUA_MAX_CALLS];
-    pj_time_val         start;
-    pj_time_val         stop;
-    unsigned            duration;
-    unsigned            delay;
-    // pjsua_conf_port_id ringback_slot;
-    // int ringback_cnt;
-    // pjmedia_port *ringback_port;
-    // int ring_cnt;
+    pj_pool_t               *pool;
+    pjsua_call_info         ci;
+    pjsua_call_id           call_id;
+    pjsua_conf_port_id      conf_mslot;
+    pjmedia_port            *lbeep;
+    pjmedia_tone_desc       tones[MAX_TONES];
+    pjsua_conf_port_id      ring_slot;
+    pjmedia_port            *ring_port;
+    app_call_data           call_data[MAX_CALLS];
+    unsigned                duration_ms;
 } app_cfg;
 
 /* for all application */
