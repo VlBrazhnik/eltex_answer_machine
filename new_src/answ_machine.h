@@ -32,13 +32,13 @@
 #define RING_OFF_MSEC               4000
 #define TONEGEN_FLAGS               0
 
-#define PJSUA_DELAY_TIME_MS         4000
-#define PJSUA_RELEASE_TIME_MS       5000
+#define PJSUA_DELAY_TIME_MS         5000
+#define PJSUA_RELEASE_TIME_MS       60000
 
 /* table of phone number */
 
 /* Call specific data */
-typedef struct app_call_data
+typedef struct app_call_data //rename as app_call_timers
 {
     pj_timer_entry          answer_timer;//rename as answer_timer
     pj_timer_entry          release_timer;
@@ -47,7 +47,7 @@ typedef struct app_call_data
 struct app_confg_t
 {
     pj_pool_t               *pool;
-    pjsua_call_info         ci[MAX_CALLS];
+    //pjsua_call_info         ci[MAX_CALLS];
     pjsua_call_id           call_id[MAX_CALLS];
     app_call_data           call_data[MAX_CALLS];
     unsigned                duration_ms;
