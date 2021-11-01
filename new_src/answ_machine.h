@@ -11,13 +11,13 @@
 #include <pjsua-lib/pjsua.h>
 
 #define THIS_FILE    "MY_PHONE"
-#define AUDIO_MSG    "/home/vlbrazhnikov/Local_Rep/eltex_answer_machine/audio_msg/female.wav"
+#define AUDIO_MSG    "/home/vlbrazhnikov/Local_Rep/eltex_answer_machine/audio_msg/synth_2.wav"
 #define SIP_DOMAIN  "yourbakery"
 #define SIP_USER    "martin"
 #define LOG_TAB     "\n\t\t\t"
 
 #define MAX_TONES                   2
-#define MAX_CALLS                   3
+#define MAX_CALLS                   10
 
 #define CLOCK_RATE                  8000
 #define CHANNEL_COUNT               2
@@ -42,15 +42,16 @@ typedef struct app_call_data //rename as app_call_timers
 {
     pj_timer_entry          answer_timer;//rename as answer_timer
     pj_timer_entry          release_timer;
+    pjsua_call_id           call_id[MAX_CALLS];
 } app_call_data;
 
 struct app_confg_t
 {
     pj_pool_t               *pool;
     //pjsua_call_info         ci[MAX_CALLS];
-    pjsua_call_id           call_id[MAX_CALLS];
     app_call_data           call_data[MAX_CALLS];
     unsigned                duration_ms;
+    unsigned                release_ms;
 
     /* decribsions tonegens for dial tone & ring */
     pjmedia_tone_desc       tones[MAX_TONES];
@@ -74,12 +75,13 @@ static pj_status_t answ_phone_init_pjsua(void);
 static pj_status_t answ_phone_init_transport(void);
 static pj_status_t answ_phone_init_sip_acc(void);
 static pj_status_t answ_phone_main_loop(void);
+static pj_status_t answ_phone_destroy(void);
 
 static void answ_phone_init_dial_tone(void);
-static void answ_phone_init_ring(void);
+static void answ_phone_init_ring_tone(void);
 static void answ_phone_init_aud_player(void);
 
-static void answ_phone_play_ring(pjsua_call_id call_id);
+static void answ_phone_play_ring_tone(pjsua_call_id call_id);
 static void answ_phone_play_dial_tone(pjsua_call_id call_id);
 static void answ_phone_play_aud_msg(pjsua_call_id call_id);
 

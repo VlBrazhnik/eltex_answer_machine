@@ -40,14 +40,14 @@ static pj_status_t answ_phone_main_init(void)
     if (status != PJ_SUCCESS) error_exit("Error init_sip_acc()", status);
 
     //init tonegen for dial tone and ring
-    answ_phone_init_ring();
+    answ_phone_init_ring_tone();
     answ_phone_init_dial_tone();
     answ_phone_init_aud_player();
 
     /* init all call_id as INVALID */
     for (pj_int32_t i = 0; i < MAX_CALLS; i++)
     {
-        app_cfg.call_id[i] = PJSUA_INVALID_ID;
+        app_cfg.call_data->call_id[i] = PJSUA_INVALID_ID;
     }
 
     //player
@@ -88,12 +88,45 @@ static pj_status_t answ_phone_main_loop(void)
             break;
         }
     }
+    
+    status = answ_phone_destroy();
+    if (status != PJ_SUCCESS)
+    {
+        error_exit("Error in answ_phone_destroy()", status);
+    }
 
-    // status = pjsua_player_destroy(app_cfg.aud_player_id);
-    // if (status != PJ_SUCCESS)
-    // {
-    //     error_exit("Error in pjsua_player_destroy", status);
-    // }
+    return status;
+}
+
+static pj_status_t answ_phone_destroy(void)
+{
+    pj_status_t status;
+    status = pjsua_player_destroy(app_cfg.aud_player_id);
+    if (status != PJ_SUCCESS)
+    {
+        error_exit("Error in pjsua_player_destroy", status);
+    }
+
+    /* cancel any timers */
+    for (pj_int32_t i = 0; i < MAX_CALLS; i++)
+    {
+        if (app_cfg.call_data[i].answer_timer.id != PJSUA_INVALID_ID)
+        {
+            app_call_data *cd = &app_cfg.call_data[i];
+            pjsip_endpoint *endpt = pjsua_get_pjsip_endpt();
+            cd->answer_timer.id = PJSUA_INVALID_ID;
+            pjsip_endpt_cancel_timer(endpt, &cd->answer_timer);
+        }
+
+        if (app_cfg.call_data[i].release_timer.id != PJSUA_INVALID_ID)
+        {
+            app_call_data *cd = &app_cfg.call_data[i];
+            pjsip_endpoint *endpt = pjsua_get_pjsip_endpt();
+            cd->release_timer.id = PJSUA_INVALID_ID;
+            pjsip_endpt_cancel_timer(endpt, &cd->release_timer);
+        }
+        PJ_LOG(3, (THIS_FILE, "Timers is canceled!"));
+    }
 
     status = pjsua_destroy();
     if (status != PJ_SUCCESS)
@@ -220,7 +253,7 @@ static void answ_phone_init_dial_tone(void)
     }
 }
 
-static void answ_phone_init_ring(void)
+static void answ_phone_init_ring_tone(void)
 {
     pj_status_t status;
     pjmedia_tone_desc tone[MAX_TONES];
@@ -294,8 +327,6 @@ static void answ_phone_play_aud_msg(pjsua_call_id call_id)
     {
         error_exit("Error pjsua_conf_connect()", status);
     }
-
-    status = pjsua_player_set_pos(app_cfg.aud_player_id, 0);
 }
 
 /* Callback called by the library upon receiving incoming call */
@@ -305,7 +336,6 @@ static void on_incoming_call(pjsua_acc_id acc_id, pjsua_call_id call_id,
     pj_status_t status;
     pjsua_call_id current_call;
     pjsua_call_info ci[MAX_CALLS];
-    pj_bool_t no_place = 0;
 
     /* set arg to void */
     PJ_UNUSED_ARG(acc_id); 
@@ -315,10 +345,10 @@ static void on_incoming_call(pjsua_acc_id acc_id, pjsua_call_id call_id,
     for (pj_int32_t i = 0; i <= MAX_CALLS; i++)
     {
         /* add call_id if array call id is empty */
-        if (app_cfg.call_id[i] == PJSUA_INVALID_ID)
+        if (app_cfg.call_data->call_id[i] == PJSUA_INVALID_ID)
         {
-            app_cfg.call_id[i] = call_id;
-            current_call = app_cfg.call_id[i];
+            app_cfg.call_data->call_id[i] = call_id;
+            current_call = app_cfg.call_data->call_id[i];
             pjsua_call_get_info(current_call, &ci[i]);
             PJ_LOG(3,(THIS_FILE,
                   "Incoming call for account %d! "
@@ -332,7 +362,7 @@ static void on_incoming_call(pjsua_acc_id acc_id, pjsua_call_id call_id,
                   (int)ci[i].local_info.slen,
                   ci[i].local_info.ptr));
 
-            status = pjsua_call_answer(current_call, 180, NULL, NULL);
+            status = pjsua_call_answer(current_call, PJSIP_SC_RINGING, NULL, NULL); //const
             if (status != PJ_SUCCESS)
             {
                 error_exit("Error call_answer_180", status);
@@ -343,7 +373,7 @@ static void on_incoming_call(pjsua_acc_id acc_id, pjsua_call_id call_id,
         if (i >= MAX_CALLS)
         {
             const pj_str_t reason = pj_str("TO MANY CALLS");
-            status = pjsua_call_hangup(call_id, 480, &reason, NULL);
+            status = pjsua_call_hangup(call_id, PJSIP_SC_TEMPORARILY_UNAVAILABLE, &reason, NULL);
             if (status != PJ_SUCCESS)
             {
                 error_exit("Error in call_hangup()", status);
@@ -355,29 +385,13 @@ static void on_incoming_call(pjsua_acc_id acc_id, pjsua_call_id call_id,
 
 static void on_call_state(pjsua_call_id call_id, pjsip_event *e)
 {
+    // pj_status_t status;
     pjsua_call_info ci;
     pjsua_call_get_info(call_id, &ci);
     
     PJ_UNUSED_ARG(e);
     if (ci.state == PJSIP_INV_STATE_DISCONNECTED)
     {
-        // /* cancel answer timer */
-        // if (app_cfg.call_data[call_id].answer_timer.id != PJSUA_INVALID_ID)
-        // {
-        //     app_call_data *cd = &app_cfg.call_data[call_id ];
-        //     pjsip_endpoint *endpt = pjsua_get_pjsip_endpt();
-        //     cd->answer_timer.id = PJSUA_INVALID_ID;
-        //     pjsip_endpt_cancel_timer(endpt, &cd->answer_timer);
-        // }
-        // /* cancel release time */
-        // if (app_cfg.call_data[call_id].release_timer.id != PJSUA_INVALID_ID)
-        // {
-        //     app_call_data *cd = &app_cfg.call_data[call_id];
-        //     pjsip_endpoint *endpt = pjsua_get_pjsip_endpt();
-        //     cd->release_timer.id = PJSUA_INVALID_ID;
-        //     pjsip_endpt_cancel_timer(endpt, &cd->release_timer);
-        // }
-
         PJ_LOG(3, (THIS_FILE, "Call %d is DISCONNECTED [reason=%d (%.*s)]",
             call_id, 
             ci.last_status,
@@ -388,33 +402,28 @@ static void on_call_state(pjsua_call_id call_id, pjsip_event *e)
 
 static void on_call_media_state(pjsua_call_id call_id)
 {
-    // pjsua_call_info ci[MAX_CALLS];
+    // pj_status_t status;
     pjsua_call_info ci;
-    // for (pj_int32_t i = 0; i < MAX_CALLS && 
-    //     (app_cfg.call_id[i] != PJSUA_INVALID_ID); i++)
-    // {
-    //     if (app_cfg.call_id[i] == call_id)
-    //     {
+
+    for (pj_int32_t i = 0; i < MAX_CALLS; i++)
+    {
+        if (app_cfg.call_data->call_id[i] == call_id)
+        {
             pjsua_call_get_info(call_id, &ci);
             PJ_LOG(3, (THIS_FILE, "Media status changed %d", 
                         ci.media_status));
             // answ_phone_play_dial_tone(call_id);
-            answ_phone_play_aud_msg(call_id);
-    //         break;
-    //     }
-    // }
+            answ_phone_play_aud_msg(app_cfg.call_data->call_id[i]);
+            break;
+        }
+    }
 
-    // When media is active, connect call to sound device.
-    //answ_phone_play_ring();
-    // answ_phone_play_dial_tone(call_id);
-    // //answ_phone_play_aud_msg();
-
-    // PJ_LOG(3, (THIS_FILE,   "pName: %s, "
-    //                         "pCap AF_RELEASE: %u, " 
-    //                         "pBlockSize: %u",
-    //                         app_cfg.pool->obj_name, 
-    //                         app_cfg.pool->capacity,
-    //                         app_cfg.pool->increment_size));
+    PJ_LOG(3, (THIS_FILE,   "pName: %s, "
+                            "pCap AF_RELEASE: %u, " 
+                            "pBlockSize: %u",
+                            app_cfg.pool->obj_name, 
+                            app_cfg.pool->capacity,
+                            app_cfg.pool->increment_size));
 }
 
 static void answ_phone_delay_answer(pjsua_call_id call_id)
@@ -428,7 +437,7 @@ static void answ_phone_delay_answer(pjsua_call_id call_id)
 
     for (pj_int32_t i = 0; i < MAX_CALLS; i++)
     {
-        if (app_cfg.call_id[i] == call_id)
+        if (app_cfg.call_data->call_id[i] == call_id)
         {
             app_cfg.call_data[i].answer_timer.id = PJSUA_INVALID_ID;
             app_cfg.call_data[i].answer_timer.cb = &answer_timer_cb;
@@ -460,17 +469,19 @@ static void answer_timer_cb(pj_timer_heap_t *h, pj_timer_entry *entry)
         error_exit("Error Invalid call id", status);
     }
 
-    status = pjsua_call_answer(call_id, 200, NULL, NULL);
+    status = pjsua_call_answer(call_id, PJSIP_SC_OK, NULL, NULL);
     if (status != PJ_SUCCESS)
     {
         error_exit("Error call_answer_200() ", status);
     }
 
-    /* cancel answer timer */
-    /* clean id after answer */
+    /* double answer 200 with pelease_answer */
+   // answer_phone_release_answer(call_id);
+
+    /* cancel answer timer  & clean id after answer */
     for (pj_int32_t i = 0; i < MAX_CALLS; i++)
     {
-        if (app_cfg.call_id[i] == call_id)
+        if (app_cfg.call_data->call_id[i] == call_id)
         {
             if (app_cfg.call_data[i].answer_timer.id != PJSUA_INVALID_ID)
             {
@@ -479,37 +490,38 @@ static void answer_timer_cb(pj_timer_heap_t *h, pj_timer_entry *entry)
                 cd->answer_timer.id = PJSUA_INVALID_ID;
                 pjsip_endpt_cancel_timer(endpt, &cd->answer_timer);
             }
-            app_cfg.call_id[i] = PJSUA_INVALID_ID;
+            app_cfg.call_data->call_id[i] = PJSUA_INVALID_ID;
             break;
         }
     }
-    //answer_phone_release_answer(call_id);
 }
 
 static void answer_phone_release_answer(pjsua_call_id call_id)
 {
     pj_status_t status;
     pj_time_val delay;
-    app_cfg.duration_ms = PJSUA_RELEASE_TIME_MS;
-
-    for (pj_int32_t i = 0; i < PJ_ARRAY_SIZE(app_cfg.call_data); i++)
-    {
-        app_cfg.call_data[i].release_timer.id = PJSUA_INVALID_ID;
-        app_cfg.call_data[i].release_timer.cb = &answer_release_cb;
-    }
-
+    app_cfg.release_ms = PJSUA_RELEASE_TIME_MS;
     delay.sec = 0;
-    delay.msec = app_cfg.duration_ms;
+    delay.msec = app_cfg.release_ms;
     pj_time_val_normalize(&delay);
- 
-    app_call_data *cd = &app_cfg.call_data[call_id];
-    cd->release_timer.id = call_id;
 
-    pjsip_endpoint *endpt = pjsua_get_pjsip_endpt();
-    status = pjsip_endpt_schedule_timer(endpt, &cd->release_timer, &delay);
-    if (status != PJ_SUCCESS)
+    for (pj_int32_t i = 0; i < MAX_CALLS; i++)
     {
-        error_exit("Error scheduler", status);
+        if (app_cfg.call_data->call_id[i] == call_id)
+        {
+            app_cfg.call_data[i].release_timer.id = PJSUA_INVALID_ID;
+            app_cfg.call_data[i].release_timer.cb = &answer_release_cb;
+            app_call_data *cd = &app_cfg.call_data[i];
+            cd->release_timer.id = call_id;
+
+            pjsip_endpoint *endpt = pjsua_get_pjsip_endpt();
+            status = pjsip_endpt_schedule_timer(endpt, &cd->release_timer, &delay);
+            if (status != PJ_SUCCESS)
+            {
+                error_exit("Error answer scheduler", status);
+            }
+            break;
+        }
     }
 }
 
@@ -535,6 +547,23 @@ static void answer_release_cb(pj_timer_heap_t *h, pj_timer_entry *entry)
     if (status != PJ_SUCCESS)
     {
         error_exit("Error pjsua_call_hangup()", status);
+    }
+
+    /* cancel release timer  & clean id after send request */
+    for (pj_int32_t i = 0; i < MAX_CALLS; i++)
+    {
+        if (app_cfg.call_data->call_id[i] == call_id)
+        {
+            if (app_cfg.call_data[i].release_timer.id != PJSUA_INVALID_ID)
+            {
+                app_call_data *cd = &app_cfg.call_data[i];
+                pjsip_endpoint *endpt = pjsua_get_pjsip_endpt();
+                cd->release_timer.id = PJSUA_INVALID_ID;
+                pjsip_endpt_cancel_timer(endpt, &cd->release_timer);
+            }
+            app_cfg.call_data->call_id[i] = PJSUA_INVALID_ID;
+            break;
+        }
     }
 }
 
