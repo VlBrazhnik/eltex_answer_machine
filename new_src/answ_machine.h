@@ -33,7 +33,7 @@
 #define TONEGEN_FLAGS               0
 
 #define PJSUA_DELAY_TIME_MS         5000
-#define PJSUA_RELEASE_TIME_MS       60000
+#define PJSUA_RELEASE_TIME_MS       30000
 
 /* table of phone number */
 
@@ -85,10 +85,10 @@ static void answ_phone_play_ring_tone(pjsua_call_id call_id);
 static void answ_phone_play_dial_tone(pjsua_call_id call_id);
 static void answ_phone_play_aud_msg(pjsua_call_id call_id);
 
-static void answer_phone_release_answer(pjsua_call_id call_id);
-static void answer_release_cb(pj_timer_heap_t *h, pj_timer_entry *entry);
+static void answ_phone_release_answer(pjsua_call_id call_id);
+static void answ_release_cb(pj_timer_heap_t *h, pj_timer_entry *entry);
 static void answ_phone_delay_answer(pjsua_call_id call_id);
-static void answer_timer_cb(pj_timer_heap_t *h, pj_timer_entry *entry);
+static void answ_timer_cb(pj_timer_heap_t *h, pj_timer_entry *entry);
 
 static void on_incoming_call(pjsua_acc_id acc_id, pjsua_call_id call_id,
                             pjsip_rx_data *rdata);
