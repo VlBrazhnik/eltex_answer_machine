@@ -10,11 +10,15 @@
 #include <pjsip_ua.h>
 #include <pjsua-lib/pjsua.h>
 
-#define THIS_FILE    "MY_PHONE"
-#define AUDIO_MSG    "/home/vlbrazhnikov/Local_Rep/eltex_answer_machine/audio_msg/synth_2.wav"
-#define SIP_DOMAIN  "yourbakery"
-#define SIP_USER    "martin"
-#define LOG_TAB     "\n\t\t\t"
+#define THIS_FILE                   "MY_PHONE"
+#define AUDIO_MSG                   "/home/vlbrazhnikov/Local_Rep/eltex_answer_machine/audio_msg/synth_2.wav"
+#define SIP_DOMAIN                  "yourbakery.com"
+#define SIP_USER                    "martin"
+#define LOG_TAB                     "\n\t\t\t"
+
+#define TEL_MARTI                   "111"
+#define TEL_GLORI                   "222"
+#define TEL_LENI                    "333"
 
 #define MAX_TONES                   2
 #define MAX_CALLS                   10
@@ -86,8 +90,8 @@ static void answ_phone_play_dial_tone(pjsua_call_id call_id);
 static void answ_phone_play_aud_msg(pjsua_call_id call_id);
 
 static void answ_phone_release_answer(pjsua_call_id call_id);
-static void answ_release_cb(pj_timer_heap_t *h, pj_timer_entry *entry);
 static void answ_phone_delay_answer(pjsua_call_id call_id);
+static void answ_release_cb(pj_timer_heap_t *h, pj_timer_entry *entry);
 static void answ_timer_cb(pj_timer_heap_t *h, pj_timer_entry *entry);
 
 static void on_incoming_call(pjsua_acc_id acc_id, pjsua_call_id call_id,

@@ -39,7 +39,7 @@ static pj_status_t answ_phone_main_init(void)
     status = answ_phone_init_sip_acc();
     if (status != PJ_SUCCESS) error_exit("Error init_sip_acc()", status);
 
-    //init tonegen for dial tone and ring
+    //init tonegen for dial tone, ring and audio player
     answ_phone_init_ring_tone();
     answ_phone_init_dial_tone();
     answ_phone_init_aud_player();
@@ -49,10 +49,6 @@ static pj_status_t answ_phone_main_init(void)
     {
         app_cfg.call_data->call_id[i] = PJSUA_INVALID_ID;
     }
-
-    //player
-
-    //tonegen ring
 
     return status;
 }
@@ -147,6 +143,7 @@ static pj_status_t answ_phone_init_pjsua(void)
     pjsua_media_config media_cfg;
     pj_status_t status;
 
+    //must pjsua_create before do anything
     status = pjsua_create();
     if (status != PJ_SUCCESS)
     {
@@ -154,6 +151,7 @@ static pj_status_t answ_phone_init_pjsua(void)
         return status;
     }
 
+    //create pool for application
     app_cfg.pool = pjsua_pool_create("app_pool", 1000, 1000);
     PJ_LOG(3, (THIS_FILE,   "pName: %s, "
                             "pCap AF_INIT: %u, " 
@@ -162,15 +160,15 @@ static pj_status_t answ_phone_init_pjsua(void)
                             app_cfg.pool->capacity,
                             app_cfg.pool->increment_size));
 
-    //init pjsua configs
+    //init default pjsua configs
     pjsua_config_default(&ua_cfg);
     pjsua_logging_config_default(&log_cfg);
     pjsua_media_config_default(&media_cfg);
 
-    //set max calls 
-    ua_cfg.max_calls = PJSUA_MAX_CALLS;
+    //set max calls (MAX_CALL or PJSUA_MAX_CALLS)
+    ua_cfg.max_calls = MAX_CALLS;
 
-    //set callback 
+    //set fundamental callbacks
     ua_cfg.cb.on_call_state = &on_call_state;
     ua_cfg.cb.on_call_media_state = &on_call_media_state;
     ua_cfg.cb.on_incoming_call = &on_incoming_call;
@@ -209,7 +207,7 @@ static pj_status_t answ_phone_init_sip_acc(void)
     cfg.reg_uri = pj_str("sip:" SIP_DOMAIN);
     cfg.cred_count = 1;
     cfg.cred_info[0].realm = pj_str(SIP_DOMAIN);
-    cfg.cred_info[0].scheme = pj_str("call");
+    cfg.cred_info[0].scheme = pj_str("tel");
     cfg.cred_info[0].username = pj_str(SIP_USER);
 
     status = pjsua_acc_add(&cfg, PJ_TRUE, NULL);
@@ -275,7 +273,7 @@ static void answ_phone_init_ring_tone(void)
     tone[0].volume = PJMEDIA_TONEGEN_VOLUME;
     tone[0].flags = TONEGEN_FLAGS;
 
-    status = pjmedia_tonegen_play(app_cfg.ring_port, 1, tone, 0);
+    status = pjmedia_tonegen_play(app_cfg.ring_port, 1, tone, PJMEDIA_TONEGEN_LOOP);
     if (status != PJ_SUCCESS)
     {
         error_exit("Error in init_ring() tone play", status);
@@ -288,7 +286,7 @@ static void answ_phone_init_ring_tone(void)
     }
 }
 
-static void answ_phone_play_ring(pjsua_call_id call_id)
+static void answ_phone_play_ring_tone(pjsua_call_id call_id)
 {
     pj_status_t status;
 
@@ -423,7 +421,10 @@ static void on_call_state(pjsua_call_id call_id, pjsip_event *e)
 
 static void on_call_media_state(pjsua_call_id call_id)
 {
-    // pj_status_t status;
+    pj_str_t first_name = pj_str("<sip:" TEL_MARTI "@10.25.72.130>");
+    pj_str_t second_name = pj_str("<sip:" TEL_GLORI "@10.25.72.130>");
+    pj_str_t third_name = pj_str("<sip:" TEL_LENI "@10.25.72.130>");
+
     pjsua_call_info ci;
 
     for (pj_int32_t i = 0; i < MAX_CALLS; i++)
@@ -431,14 +432,33 @@ static void on_call_media_state(pjsua_call_id call_id)
         if (app_cfg.call_data->call_id[i] == call_id)
         {
             pjsua_call_get_info(call_id, &ci);
-            PJ_LOG(3, (THIS_FILE, "Media status changed %d", 
-                        ci.media_status));
-            // answ_phone_play_dial_tone(call_id);
-            answ_phone_play_aud_msg(app_cfg.call_data->call_id[i]);
+            PJ_LOG(3, (THIS_FILE, "Media status changed %d", ci.media_status));
+
+            /* get info about input number */
+            pj_str_t input_name = pj_str(ci.local_info.ptr);
+
+            /* run subscribers handler */
+            if (0 == pj_strncmp(&input_name, &first_name, pj_strlen(&first_name)))
+            {
+                PJ_LOG(3, (THIS_FILE, "Call to: %s ", input_name));
+                answ_phone_play_aud_msg(app_cfg.call_data->call_id[i]);
+            }
+
+            if (0 == pj_strncmp(&input_name, &second_name, pj_strlen(&second_name)))
+            {
+                PJ_LOG(3, (THIS_FILE, "Call to: %s ", input_name));
+                answ_phone_play_dial_tone(app_cfg.call_data->call_id[i]);
+            }
+
+            if (0 == pj_strncmp(&input_name, &third_name, pj_strlen(&third_name)))
+            {
+                PJ_LOG(3, (THIS_FILE, "Call to: %s ", input_name));
+                answ_phone_play_ring_tone(app_cfg.call_data->call_id[i]);
+            }
+
             break;
         }
     }
-
     PJ_LOG(3, (THIS_FILE,   "pName: %s, "
                             "pCap AF_RELEASE: %u, " 
                             "pBlockSize: %u",
@@ -495,9 +515,10 @@ static void answ_timer_cb(pj_timer_heap_t *h, pj_timer_entry *entry)
     {
         error_exit("Error call_answer_200() ", status);
     }
-
-    /*  after answer start release timer for hangup 
-        set up release answer for hangup call */
+    /*  
+        after answer start release timer for hangup 
+        set up release answer for hangup call 
+    */
     answ_phone_release_answer(call_id);
 }
 
