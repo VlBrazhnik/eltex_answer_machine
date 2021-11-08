@@ -47,9 +47,8 @@ static pj_status_t answ_phone_main_init(void)
     /* init all call_id as INVALID */
     for (pj_int32_t i = 0; i < MAX_CALLS; i++)
     {
-        app_cfg.call_data->call_id[i] = PJSUA_INVALID_ID;
+        app_cfg.call_data[i].call_id = PJSUA_INVALID_ID;
     }
-
     return status;
 }
 
@@ -62,7 +61,7 @@ static pj_status_t answ_phone_main_loop(void)
     if (status != PJ_SUCCESS)
     {
         pjsua_destroy();
-        pjsua_perror(THIS_FILE, "Error in pjsua_start()", status);
+        pjsua_perror(THIS_FILE, "Error in pjsua`_start()", status);
         return status;
     }
 
@@ -334,26 +333,49 @@ static void on_incoming_call(pjsua_acc_id acc_id, pjsua_call_id call_id,
     pj_status_t status;
     pjsua_call_id current_call;
     pjsua_call_info ci[MAX_CALLS];
+    pjsip_uri *uri;
+    pjsip_sip_uri *sip_uri;
 
     /* set arg to void */
     PJ_UNUSED_ARG(acc_id); 
-    PJ_UNUSED_ARG(rdata);
+    //PJ_UNUSED_ARG(rdata);
 
     /* add incoming call_id to array call_ids */
+
     for (pj_int32_t i = 0; i <= MAX_CALLS; i++)
     {
         /* add call_id if array call id is empty */
-        if (app_cfg.call_data->call_id[i] == PJSUA_INVALID_ID)
+        if (app_cfg.call_data[i].call_id == PJSUA_INVALID_ID)
         {
-            app_cfg.call_data->call_id[i] = call_id;
-            current_call = app_cfg.call_data->call_id[i];
+            app_cfg.call_data[i].call_id = call_id;
+            current_call = app_cfg.call_data[i].call_id;
             pjsua_call_get_info(current_call, &ci[i]);
+
+            /* get username from recive data uri */
+            uri = pjsip_uri_get_uri(rdata->msg_info.to->uri);
+            if (!PJSIP_URI_SCHEME_IS_SIP(uri) && !PJSIP_URI_SCHEME_IS_SIPS(uri))
+                error_exit("Error in get_uri()", PJ_FALSE);
+            sip_uri = (pjsip_sip_uri *)uri;
+            answ_phone_print_uri("Recive SIP URI ", uri);
+
+            /* save username to arrays */
+            app_cfg.call_data[i].username.ptr = (char *) pj_pool_alloc(app_cfg.pool, 256);
+            if (!app_cfg.call_data[i].username.ptr)
+            {
+                error_exit("Error pj_pool_alloc()", PJ_FALSE);
+            }
+            pj_strcpy(&app_cfg.call_data[i].username, &sip_uri->user);
+
+            PJ_LOG(2, (THIS_FILE, "SAVED USERNAME: %.*s", 
+                        (int)app_cfg.call_data[i].username.slen, 
+                        app_cfg.call_data[i].username.ptr));
+
             PJ_LOG(3,(THIS_FILE,
                   "Incoming call for account %d! "
                   "Media count: %d audio!"
                   LOG_TAB"From: %.*s "
                   LOG_TAB"To: %.*s ",
-                  current_call,
+                  acc_id,
                   ci[i].rem_aud_cnt,
                   (int)ci[i].remote_info.slen,
                   ci[i].remote_info.ptr,
@@ -380,10 +402,23 @@ static void on_incoming_call(pjsua_acc_id acc_id, pjsua_call_id call_id,
     }
 }
 
+static void answ_phone_print_uri(const char *title, pjsip_uri *uri)
+{
+    char buf[80];
+    int len;
+
+    len = pjsip_uri_print(PJSIP_URI_IN_FROMTO_HDR, uri, buf, sizeof(buf) - 1);
+    if (len < 0)
+    {
+        error_exit("Not enough buffer to print URI", PJ_FALSE);
+    }
+    buf[len] = '\0';
+    PJ_LOG(3, (THIS_FILE, "%s: %s", title, buf));
+}
+
 
 static void on_call_state(pjsua_call_id call_id, pjsip_event *e)
 {
-    //pj_status_t status;
     pjsua_call_info ci;
     pjsua_call_get_info(call_id, &ci);
     PJ_UNUSED_ARG(e);
@@ -399,7 +434,7 @@ static void on_call_state(pjsua_call_id call_id, pjsip_event *e)
         /* cancel answer, release timers  & clean id after answer */
         for (pj_int32_t i = 0; i < MAX_CALLS; i++)
         {
-            if (app_cfg.call_data->call_id[i] == call_id)
+            if (app_cfg.call_data[i].call_id == call_id)
             {
                 if (app_cfg.call_data[i].answer_timer.id != PJSUA_INVALID_ID)
                 {
@@ -412,7 +447,7 @@ static void on_call_state(pjsua_call_id call_id, pjsip_event *e)
                     pjsip_endpt_cancel_timer(endpt, &cd->answer_timer);
                     pjsip_endpt_cancel_timer(endpt, &cd->release_timer);
                 }
-                app_cfg.call_data->call_id[i] = PJSUA_INVALID_ID;
+                app_cfg.call_data[i].call_id = PJSUA_INVALID_ID;
                 break;
             }
         }
@@ -421,41 +456,47 @@ static void on_call_state(pjsua_call_id call_id, pjsip_event *e)
 
 static void on_call_media_state(pjsua_call_id call_id)
 {
-    pj_str_t first_name = pj_str("<sip:" TEL_MARTI "@10.25.72.130>");
-    pj_str_t second_name = pj_str("<sip:" TEL_GLORI "@10.25.72.130>");
-    pj_str_t third_name = pj_str("<sip:" TEL_LENI "@10.25.72.130>");
-
+    pj_str_t first_name = pj_str(TEL_MARTI);
+    pj_str_t second_name = pj_str(TEL_GLORI);
+    pj_str_t third_name = pj_str(TEL_LENI);
     pjsua_call_info ci;
+    pj_str_t tmp_name;
 
     for (pj_int32_t i = 0; i < MAX_CALLS; i++)
     {
-        if (app_cfg.call_data->call_id[i] == call_id)
+        if (app_cfg.call_data[i].call_id == call_id)
         {
             pjsua_call_get_info(call_id, &ci);
             PJ_LOG(3, (THIS_FILE, "Media status changed %d", ci.media_status));
 
             /* get info about input number */
-            pj_str_t input_name = pj_str(ci.local_info.ptr);
+            tmp_name = app_cfg.call_data[i].username;
+            PJ_LOG(3, (THIS_FILE, "RECIVE USERNAME: %.*s", tmp_name.slen, tmp_name.ptr));
 
             /* run subscribers handler */
-            if (0 == pj_strncmp(&input_name, &first_name, pj_strlen(&first_name)))
+            if (0 == pj_strncmp(&tmp_name, &first_name, pj_strlen(&first_name)))
             {
-                PJ_LOG(3, (THIS_FILE, "Call to: %s ", input_name));
-                answ_phone_play_aud_msg(app_cfg.call_data->call_id[i]);
+                PJ_LOG(3, (THIS_FILE, "Call to: %.*s ", 
+                                        (int)tmp_name.slen, 
+                                        tmp_name.ptr));
+                answ_phone_play_aud_msg(app_cfg.call_data[i].call_id);
             }
 
-            if (0 == pj_strncmp(&input_name, &second_name, pj_strlen(&second_name)))
+            if (0 == pj_strncmp(&tmp_name, &second_name, pj_strlen(&second_name)))
             {
-                PJ_LOG(3, (THIS_FILE, "Call to: %s ", input_name));
-                answ_phone_play_dial_tone(app_cfg.call_data->call_id[i]);
+                PJ_LOG(3, (THIS_FILE, "Call to: %.*s ", 
+                                        (int)tmp_name.slen, 
+                                        tmp_name.ptr));
+                answ_phone_play_dial_tone(app_cfg.call_data[i].call_id);
             }
 
-            if (0 == pj_strncmp(&input_name, &third_name, pj_strlen(&third_name)))
+            if (0 == pj_strncmp(&tmp_name, &third_name, pj_strlen(&third_name)))
             {
-                PJ_LOG(3, (THIS_FILE, "Call to: %s ", input_name));
-                answ_phone_play_ring_tone(app_cfg.call_data->call_id[i]);
+                PJ_LOG(3, (THIS_FILE, "Call to: %.*s ", 
+                                        (int)tmp_name.slen, 
+                                        tmp_name.ptr));
+                answ_phone_play_ring_tone(app_cfg.call_data[i].call_id);
             }
-
             break;
         }
     }
@@ -478,7 +519,7 @@ static void answ_phone_delay_answer(pjsua_call_id call_id)
 
     for (pj_int32_t i = 0; i < MAX_CALLS; i++)
     {
-        if (app_cfg.call_data->call_id[i] == call_id)
+        if (app_cfg.call_data[i].call_id == call_id)
         {
             app_cfg.call_data[i].answer_timer.id = PJSUA_INVALID_ID;
             app_cfg.call_data[i].answer_timer.cb = &answ_timer_cb;
@@ -533,7 +574,7 @@ static void answ_phone_release_answer(pjsua_call_id call_id)
     pj_time_val_normalize(&delay);
     for (pj_int32_t i = 0; i < MAX_CALLS; i++)
     {
-        if (app_cfg.call_data->call_id[i] == call_id)
+        if (app_cfg.call_data[i].call_id == call_id)
         {
             app_cfg.call_data[i].release_timer.id = PJSUA_INVALID_ID;
             app_cfg.call_data[i].release_timer.cb = &answ_release_cb;

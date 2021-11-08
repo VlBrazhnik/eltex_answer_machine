@@ -42,17 +42,17 @@
 /* table of phone number */
 
 /* Call specific data */
-typedef struct app_call_data //rename as app_call_timers
+typedef struct app_call_data
 {
-    pj_timer_entry          answer_timer;//rename as answer_timer
+    pj_timer_entry          answer_timer;
     pj_timer_entry          release_timer;
-    pjsua_call_id           call_id[MAX_CALLS];
+    pjsua_call_id           call_id;
+    pj_str_t                username;
 } app_call_data;
 
 struct app_confg_t
 {
     pj_pool_t               *pool;
-    //pjsua_call_info         ci[MAX_CALLS];
     app_call_data           call_data[MAX_CALLS];
     unsigned                duration_ms;
     unsigned                release_ms;
@@ -99,3 +99,5 @@ static void on_incoming_call(pjsua_acc_id acc_id, pjsua_call_id call_id,
 static void on_call_state(pjsua_call_id call_id, pjsip_event *e);
 static void on_call_media_state(pjsua_call_id call_id);
 static void error_exit(const char *title, pj_status_t status);
+
+static void answ_phone_print_uri(const char *title, pjsip_uri *uri);
