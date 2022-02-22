@@ -1,5 +1,8 @@
 #include "answ_machine.h"
 
+/* global application config */
+//struct app_confg_t app_cfg;
+
 int main(int argc, char *argv[])
 {
     pj_status_t status;
@@ -16,7 +19,7 @@ int main(int argc, char *argv[])
         error_exit("Error in main_loop()", status);
     }
 
-    return status;
+    return 0;
 }
 
 static void error_exit(const char *title, pj_status_t status)
@@ -30,6 +33,8 @@ static pj_status_t answ_phone_main_init(void)
 {
     pj_status_t status = PJ_FALSE;
     pj_int32_t i = 0;
+    // int32_t capture_dev = 0;
+    // int32_t playback_dev = 0;
 
     status = answ_phone_pjsua_init();
     if (status != PJ_SUCCESS) error_exit("Error in init_pjsua()", status);
@@ -49,12 +54,19 @@ static pj_status_t answ_phone_main_init(void)
                             app_cfg.pool->capacity,
                             app_cfg.pool->increment_size));
 
+    // status = pjsua_set_snd_dev(capture_dev, playback_dev);
+    // if (status != PJ_SUCCESS)
+    // {
+    //     error_exit("Error in set_snd_dev()", status);
+    // }
+    // PJ_LOG(3, (THIS_FILE, "CAP_DEV: %u, PLAYBACK_DEV: %u", capture_dev, playback_dev));
+
     //init tonegen for dial tone, ring and audio player
     answ_phone_ring_tone_init();
     answ_phone_dial_tone_init();
     answ_phone_aud_player_init();
 
-    /* init all call_id as INVALID (can recv calls)*/
+    /* init all call_id as INVALID */
     for (i = 0; i < MAX_CALLS; i++)
     {
         app_cfg.call_data[i].call_id = PJSUA_INVALID_ID;
@@ -379,6 +391,11 @@ static void on_call_media_state(pjsua_call_id call_id)
                 PJ_LOG(3, (THIS_FILE, "Call to: %.*s ", 
                                         (int)tmp_name.slen, 
                                         tmp_name.ptr));
+                pjsua_set_null_snd_dev();
+                // if (pjsua_set_null_snd_dev()
+                // {
+                //     error_exit("Error in set_null_snd_dev()", PJ_FALSE);
+                // }
                 answ_phone_play_aud_msg(call_id);
             }
 
@@ -612,7 +629,7 @@ static void answ_phone_play_dial_tone(pjsua_call_id call_id)
     pj_status_t status;
 
     status = pjsua_conf_connect(app_cfg.dial_tone_slot, 
-            pjsua_call_get_conf_port(call_id)); //call_ids instead call_id
+            pjsua_call_get_conf_port(call_id));
     if (status != PJ_SUCCESS)
     {
         error_exit("pjsua_conf_connect() error", status);
@@ -623,8 +640,8 @@ static void answ_phone_play_aud_msg(pjsua_call_id call_id)
 {
     pj_status_t status;
 
-    status = pjsua_conf_connect(pjsua_player_get_conf_port(app_cfg.aud_player_id),
-            pjsua_call_get_conf_port(call_id));
+    /* was pjsua_call_get_conf_port(call_id)*/
+    status = pjsua_conf_connect(pjsua_player_get_conf_port(app_cfg.aud_player_id), pjsua_call_get_conf_port(call_id));
     if (status != PJ_SUCCESS)
     {
         error_exit("Error pjsua_conf_connect()", status);

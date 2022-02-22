@@ -1,5 +1,5 @@
 #Modify this to point to the PJSIP location.
-PJBASE=/home/vlbrazhnikov/Local_Rep/eltex_answer_machine/pjproject-2.10
+PJBASE=/home/vlbrazhnikov/Local_Rep/eltex_answer_machine/pjproject-2.11_x86
 
 include $(PJBASE)/build.mak
 
